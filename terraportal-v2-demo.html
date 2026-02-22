@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>TerraPortal v2 — Azure Infrastructure Lifecycle</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'IBM Plex Mono',monospace;background:#0d1117;color:#c9d1d9;min-height:100vh;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.2}}
+@keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ─ Header ─ */
+.hdr{background:#161b22;border-bottom:1px solid #21262d;padding:0 20px;height:56px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:200;}
+.brand{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.brand-icon{font-size:20px;}
+.brand-name{font-size:17px;font-weight:700;color:#58a6ff;}
+.brand-sub{font-size:10px;color:#8b949e;border-left:1px solid #30363d;padding-left:12px;}
+.stat-strip{flex:1;display:flex;gap:16px;justify-content:center;flex-wrap:wrap;}
+.stat-chip{font-size:12px;}
+.stat-chip b{font-weight:700;}
+nav{display:flex;gap:4px;flex-shrink:0;}
+.nb{background:transparent;border:1px solid transparent;color:#8b949e;padding:5px 13px;border-radius:6px;cursor:pointer;font-size:11px;font-family:inherit;transition:all .15s;}
+.nb:hover{color:#e6edf3;background:#21262d;}
+.nb.on{background:#1f6feb22;border-color:#1f6feb;color:#58a6ff;}
+
+/* ─ Main ─ */
+main{padding:20px;max-width:1500px;margin:0 auto;}
+.view{display:none;}.view.on{display:block;}
+
+/* ─ Cards ─ */
+.card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px;animation:slideDown .2s ease;}
+.card-title{font-size:16px;font-weight:700;color:#e6edf3;margin-bottom:18px;}
+.layout2{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
+
+/* ─ Form ─ */
+.sec{margin-bottom:18px;}
+.sec-lbl{display:block;font-size:10px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.fl{margin-bottom:0;}
+.fl-lbl{display:block;font-size:10px;color:#6b7280;margin-bottom:3px;}
+input,select{width:100%;background:#0d1117;border:1px solid #30363d;border-radius:5px;color:#e6edf3;padding:7px 10px;font-size:12px;font-family:inherit;outline:none;transition:border-color .15s;}
+input:focus,select:focus{border-color:#58a6ff;}
+select option{background:#161b22;}
+.type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.type-btn{background:#0d1117;border:1px solid #30363d;border-radius:7px;padding:10px 6px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-family:inherit;color:#8b949e;transition:all .15s;}
+.type-btn:hover{border-color:#444;}
+.type-btn.on{color:#e6edf3;}
+.type-emoji{font-size:18px;}
+.type-lbl{font-size:9px;}
+
+/* ─ Buttons ─ */
+.btn-primary{background:linear-gradient(135deg,#1d4ed8,#3b82f6);border:none;color:#fff;padding:9px 20px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;transition:opacity .15s;}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+.btn-ghost{background:transparent;border:1px solid #30363d;color:#8b949e;padding:5px 13px;border-radius:5px;cursor:pointer;font-size:11px;font-family:inherit;}
+.btn-ghost:hover{color:#e6edf3;}
+.btn-update{background:#1d4ed833;border:1px solid #3b82f6;color:#93c5fd;padding:5px 12px;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit;}
+.btn-decomm{background:#7f1d1d33;border:1px solid #ef4444;color:#fca5a5;padding:5px 12px;border-radius:5px;cursor:pointer;font-size:10px;font-family:inherit;}
+.btn-danger{background:#7f1d1d;border:none;color:#fff;padding:9px 20px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;}
+.btn-danger:disabled{opacity:.4;cursor:not-allowed;}
+.btn-blue{background:#1d4ed8;border:none;color:#fff;padding:9px 20px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;}
+.icon-btn{background:#21262d;border:1px solid #30363d;color:#e6edf3;padding:3px 8px;border-radius:4px;cursor:pointer;font-family:inherit;}
+
+/* ─ Status badges ─ */
+.badge{padding:3px 9px;border-radius:20px;font-size:10px;font-weight:600;border:1px solid;display:inline-flex;align-items:center;gap:4px;}
+.dot{width:5px;height:5px;border-radius:50%;background:currentColor;animation:pulse 1.4s infinite;}
+
+/* ─ Tags ─ */
+.tag-row{display:flex;gap:6px;margin-bottom:6px;align-items:center;}
+.tag-row input:first-child{flex:1;}
+.tag-row input:nth-child(2){flex:2;}
+.tag-pill{font-size:9px;background:#1c2c3e;color:#79c0ff;padding:1px 7px;border-radius:20px;}
+
+/* ─ Inventory ─ */
+.inv-filters{display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap;}
+.filter-btn{background:transparent;border:1px solid #30363d;color:#8b949e;padding:3px 10px;border-radius:20px;cursor:pointer;font-size:10px;font-family:inherit;}
+.filter-btn.on{background:#1f6feb22;border-color:#58a6ff;color:#58a6ff;}
+.inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:14px;}
+.res-card{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:16px;}
+.res-hdr{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.res-icon{font-size:24px;}
+.res-name{font-size:14px;font-weight:700;color:#e6edf3;}
+.res-type{font-size:10px;color:#8b949e;}
+.res-meta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;}
+.meta{font-size:10px;color:#8b949e;}
+.meta code{color:#79c0ff;}
+.log-peek{background:#0d1117;border:1px solid #21262d;border-radius:5px;padding:6px 10px;font-size:9px;color:#7ee787;margin-bottom:8px;font-family:monospace;line-height:1.7;}
+.res-actions{display:flex;gap:6px;}
+.expanded-panel{margin-top:14px;border-top:1px solid #21262d;padding-top:14px;display:none;}
+.expanded-panel.on{display:block;}
+.exp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.exp-lbl{font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;margin-bottom:5px;margin-top:10px;}
+pre.mini{background:#0d1117;border:1px solid #21262d;border-radius:5px;padding:8px;font-size:9px;color:#7ee787;max-height:140px;overflow-y:auto;}
+.ch-item{background:#0d1117;border:1px solid #21262d;border-radius:5px;padding:7px 10px;font-size:10px;margin-bottom:4px;}
+
+/* ─ Code preview ─ */
+.code-box{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:14px;font-size:10px;color:#7ee787;line-height:1.7;max-height:300px;overflow-y:auto;white-space:pre;overflow-x:auto;}
+
+/* ─ Modal ─ */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;display:none;align-items:center;justify-content:center;padding:20px;}
+.overlay.on{display:flex;}
+.modal{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:24px;max-width:640px;width:100%;max-height:90vh;overflow-y:auto;animation:slideDown .2s ease;}
+.modal-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+.modal-title{font-size:15px;font-weight:700;color:#e6edf3;}
+.warn-box{background:#2a0d0d;border-left:3px solid #ef4444;border-radius:5px;padding:10px 12px;font-size:11px;color:#fca5a5;margin-bottom:14px;}
+.info-box{background:#0d1f2a;border-left:3px solid #3b82f6;border-radius:5px;padding:10px 12px;font-size:11px;color:#93c5fd;margin-bottom:14px;}
+.diff-item{background:#0d1117;border:1px solid #21262d;border-radius:5px;padding:8px 12px;margin-bottom:6px;font-family:monospace;font-size:11px;}
+.diff-key{color:#c9d1d9;font-weight:700;}
+.diff-from{color:#ef4444;}
+.diff-to{color:#22c55e;}
+
+/* ─ History ─ */
+.hist-item{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:14px;margin-bottom:8px;}
+
+/* ─ Toast ─ */
+.toast{position:fixed;top:14px;right:14px;z-index:999;padding:10px 16px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid;display:flex;gap:8px;align-items:center;box-shadow:0 8px 32px rgba(0,0,0,.5);animation:slideDown .2s ease;}
+
+/* ─ State diagram ─ */
+.state-info{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:14px;margin-top:0;}
+.state-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:11px;}
+.state-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+
+@media(max-width:800px){.layout2{grid-template-columns:1fr;}.inv-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="hdr">
+  <div class="brand">
+    <span class="brand-icon">⚡</span>
+    <span class="brand-name">TerraPortal</span>
+    <span class="brand-sub">v2 · Azure Lifecycle Manager</span>
+  </div>
+  <div class="stat-strip" id="stat-strip"></div>
+  <nav>
+    <button class="nb on" onclick="switchTab('provision')">🚀 Provision</button>
+    <button class="nb" onclick="switchTab('inventory')">📋 Resources</button>
+    <button class="nb" onclick="switchTab('history')">📜 History</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ═══════════════ PROVISION ═══════════════ -->
+  <div class="view on" id="view-provision">
+    <div class="layout2">
+      <!-- Left: Form -->
+      <div class="card">
+        <div class="card-title">🚀 Provision New Resource</div>
+
+        <!-- Type selector -->
+        <div class="sec">
+          <label class="sec-lbl">Resource Type</label>
+          <div class="type-grid" id="type-grid"></div>
+        </div>
+
+        <!-- Request details -->
+        <div class="sec">
+          <label class="sec-lbl">Request Details</label>
+          <div class="row3">
+            <div class="fl"><label class="fl-lbl">🎫 Ticket *</label><input id="prov-ticket" placeholder="JIRA-1234" oninput="livePreview()"></div>
+            <div class="fl"><label class="fl-lbl">🌍 Environment</label><select id="prov-env" onchange="livePreview()"><option>dev</option><option>staging</option><option>prod</option><option>dr</option></select></div>
+            <div class="fl"><label class="fl-lbl">👤 Requested By</label><input id="prov-who" placeholder="your.name"></div>
+          </div>
+        </div>
+
+        <!-- Dynamic fields -->
+        <div class="sec" id="resource-fields-wrap">
+          <label class="sec-lbl" id="resource-fields-label"></label>
+          <div id="resource-fields" class="row2"></div>
+        </div>
+
+        <!-- Extra tags -->
+        <div class="sec">
+          <label class="sec-lbl">🏷️ Extra Tags</label>
+          <div id="extra-tags"></div>
+          <button class="btn-ghost" style="width:100%;margin-top:4px" onclick="addTag()">+ Add Tag</button>
+        </div>
+
+        <button class="btn-primary" style="width:100%" id="prov-btn" onclick="handleProvision()">🚀 Provision with Terraform</button>
+      </div>
+
+      <!-- Right: Preview + info -->
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <!-- TF Preview -->
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="font-size:13px;font-weight:600;color:#e6edf3;">📄 Generated main.tf</div>
+            <button class="btn-ghost" onclick="togglePreview()">Preview ▼</button>
+          </div>
+          <div id="tf-placeholder" style="text-align:center;padding:20px 0;color:#8b949e;font-size:11px;">Click "Preview" to see generated Terraform</div>
+          <pre class="code-box" id="tf-code" style="display:none;"></pre>
+        </div>
+
+        <!-- State backend info -->
+        <div class="card" style="border-color:#1f6feb44;">
+          <div style="font-size:12px;font-weight:600;color:#58a6ff;margin-bottom:12px;">☁️ Terraform State — Azure Blob Storage</div>
+          <div style="font-size:11px;color:#8b949e;line-height:2;">
+            <div>📦 Storage Account: <code style="color:#79c0ff">$TF_STATE_STORAGE_ACCOUNT</code></div>
+            <div>🗂️ Container: <code style="color:#79c0ff">tfstate</code></div>
+            <div>🔑 State Key: <code style="color:#79c0ff">&lt;deployment_id&gt;/terraform.tfstate</code></div>
+            <div>📋 Inventory: <code style="color:#79c0ff">inventory/inventory.json</code></div>
+          </div>
+          <div style="margin-top:10px;background:#0d2818;border-left:3px solid #22c55e;border-radius:4px;padding:8px 10px;font-size:10px;color:#86efac;">
+            Each resource has its own isolated state file. Provision, Update, and Decommission all operate on the same state — no drift.
+          </div>
+        </div>
+
+        <!-- Auto tags -->
+        <div class="card">
+          <div style="font-size:11px;font-weight:600;color:#8b949e;margin-bottom:10px;">🏷️ Auto-applied Tags</div>
+          <div id="auto-tags-display"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ INVENTORY ═══════════════ -->
+  <div class="view" id="view-inventory">
+    <div class="inv-filters">
+      <input style="max-width:220px" placeholder="🔍 name or ticket…" oninput="filterInv(this.value)" id="inv-search">
+      <div id="filter-btns"></div>
+    </div>
+    <div class="inv-grid" id="inv-grid"></div>
+  </div>
+
+  <!-- ═══════════════ HISTORY ═══════════════ -->
+  <div class="view" id="view-history">
+    <div class="card-title" style="margin-bottom:16px;">📜 Audit Trail</div>
+    <div id="history-list"></div>
+  </div>
+</main>
+
+<!-- ═══════ UPDATE MODAL ═══════ -->
+<div class="overlay" id="modal-update">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-title" id="update-title">✏️ Update Resource</div>
+      <button class="icon-btn" onclick="closeModal('update')">✕</button>
+    </div>
+    <div class="info-box">Only updatable fields are shown. Immutable fields (name, region, etc.) cannot be changed without re-provisioning.</div>
+    <div class="row3" style="margin-bottom:12px;">
+      <div class="fl"><label class="fl-lbl">🎫 Ticket</label><input id="upd-ticket"></div>
+      <div class="fl"><label class="fl-lbl">👤 Requested By</label><input id="upd-who" placeholder="your.name"></div>
+    </div>
+    <div id="update-fields" class="row2" style="margin-bottom:12px;"></div>
+    <div id="update-step2" style="display:none;">
+      <div style="font-size:12px;font-weight:600;color:#e6edf3;margin-bottom:10px;">📋 Terraform Plan — Changes to Apply</div>
+      <div id="diff-list" style="margin-bottom:14px;"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px;" id="update-actions">
+      <button class="btn-blue" id="upd-preview-btn" onclick="updatePreview()">Preview Changes →</button>
+      <button class="btn-blue" id="upd-apply-btn" style="display:none;" onclick="applyUpdate()">✅ Apply Update</button>
+      <button class="btn-ghost" onclick="closeModal('update')">Cancel</button>
+      <button class="btn-ghost" id="upd-back-btn" style="display:none;" onclick="updateBack()">← Back</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ DECOMMISSION MODAL ═══════ -->
+<div class="overlay" id="modal-decomm">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-title" id="decomm-title">🗑️ Decommission Resource</div>
+      <button class="icon-btn" onclick="closeModal('decomm')">✕</button>
+    </div>
+    <div class="warn-box">⚠️ This runs <code>terraform destroy</code> and permanently deletes all Azure resources. This cannot be undone.</div>
+    <div class="row3" style="margin-bottom:10px;">
+      <div class="fl"><label class="fl-lbl">🎫 Ticket</label><input id="dec-ticket"></div>
+      <div class="fl"><label class="fl-lbl">👤 Requested By</label><input id="dec-who" placeholder="your.name"></div>
+    </div>
+    <div class="fl" style="margin-bottom:10px;"><label class="fl-lbl">📝 Reason</label><input id="dec-reason" placeholder="e.g. Project decommissioned"></div>
+    <div class="fl"><label class="fl-lbl" id="dec-confirm-lbl">Type the resource name to confirm</label><input id="dec-confirm" placeholder="" oninput="checkDecomm()"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn-danger" id="dec-btn" disabled onclick="applyDecommission()">🗑️ Confirm Decommission</button>
+      <button class="btn-ghost" onclick="closeModal('decomm')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast" style="display:none;"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────
+const REGIONS = ["East US","East US 2","West US","West US 2","West Europe","North Europe","Southeast Asia","Australia East","UK South"];
+const RT = {
+  vm:      {label:"Virtual Machine",icon:"🖥️",color:"#0078d4",updatable:["vmSize","diskType","osDiskSizeGb"],fields:[
+    {n:"name",l:"VM Name",t:"text",req:true,ph:"prod-web-vm-01",im:true},
+    {n:"location",l:"Region",t:"select",req:true,opts:REGIONS,im:true},
+    {n:"vmSize",l:"VM Size",t:"select",opts:["Standard_B1s","Standard_B2s","Standard_D2s_v3","Standard_D4s_v3","Standard_E4s_v3"]},
+    {n:"adminUsername",l:"Admin User",t:"text",ph:"azureuser",im:true},
+    {n:"diskType",l:"Disk Type",t:"select",opts:["Standard_LRS","Premium_LRS","StandardSSD_LRS"]},
+    {n:"osDiskSizeGb",l:"OS Disk GB",t:"number",ph:"30"},
+  ]},
+  storage: {label:"Storage Account",icon:"🗄️",color:"#107c41",updatable:["tier","replication","versioning","retentionDays"],fields:[
+    {n:"name",l:"Account Name",t:"text",req:true,ph:"mystorageaccount",im:true},
+    {n:"location",l:"Region",t:"select",req:true,opts:REGIONS,im:true},
+    {n:"tier",l:"Tier",t:"select",opts:["Standard","Premium"]},
+    {n:"replication",l:"Replication",t:"select",opts:["LRS","GRS","ZRS","RAGRS","GZRS"]},
+    {n:"versioning",l:"Versioning",t:"select",opts:["false","true"]},
+    {n:"retentionDays",l:"Retention Days",t:"number",ph:"7"},
+  ]},
+  aks:     {label:"AKS Cluster",icon:"☸️",color:"#326ce5",updatable:["nodeCount","vmSize","k8sVersion","minNodes","maxNodes"],fields:[
+    {n:"name",l:"Cluster Name",t:"text",req:true,ph:"my-aks-cluster",im:true},
+    {n:"location",l:"Region",t:"select",req:true,opts:REGIONS,im:true},
+    {n:"nodeCount",l:"Node Count",t:"number",ph:"2"},
+    {n:"vmSize",l:"Node VM Size",t:"select",opts:["Standard_D2_v2","Standard_D4_v2","Standard_D8_v2"]},
+    {n:"k8sVersion",l:"K8s Version",t:"select",opts:["1.28","1.27","1.26"]},
+    {n:"autoScaling",l:"Auto Scaling",t:"select",opts:["false","true"],im:true},
+    {n:"minNodes",l:"Min Nodes",t:"number",ph:"1"},
+    {n:"maxNodes",l:"Max Nodes",t:"number",ph:"5"},
+  ]},
+  sql:     {label:"SQL Database",icon:"🗃️",color:"#e74c3c",updatable:["sku","maxSizeGb"],fields:[
+    {n:"name",l:"DB Name",t:"text",req:true,ph:"mydb",im:true},
+    {n:"location",l:"Region",t:"select",req:true,opts:REGIONS,im:true},
+    {n:"adminLogin",l:"Admin Login",t:"text",ph:"sqladmin",im:true},
+    {n:"sku",l:"SKU",t:"select",opts:["Basic","S0","S1","S2","P1","P2"]},
+    {n:"maxSizeGb",l:"Max Size GB",t:"number",ph:"2"},
+  ]},
+  keyvault:{label:"Key Vault",icon:"🔐",color:"#f39c12",updatable:["softDeleteRetention","networkDefaultAction"],fields:[
+    {n:"name",l:"Vault Name",t:"text",req:true,ph:"my-keyvault",im:true},
+    {n:"location",l:"Region",t:"select",req:true,opts:REGIONS,im:true},
+    {n:"sku",l:"SKU",t:"select",opts:["standard","premium"],im:true},
+    {n:"softDeleteRetention",l:"Soft Delete Days",t:"number",ph:"7"},
+    {n:"networkDefaultAction",l:"Network Default",t:"select",opts:["Allow","Deny"]},
+  ]},
+  vnet:    {label:"Virtual Network",icon:"🌐",color:"#9b59b6",updatable:["dnsServers"],fields:[
+    {n:"name",l:"VNet Name",t:"text",req:true,ph:"my-vnet",im:true},
+    {n:"location",l:"Region",t:"select",req:true,opts:REGIONS,im:true},
+    {n:"addressSpace",l:"Address Space",t:"text",ph:"10.0.0.0/16",im:true},
+    {n:"dnsServers",l:"DNS Servers",t:"text",ph:"168.63.129.16"},
+  ]},
+};
+const STATUS = {
+  provisioning:   {c:"#f59e0b",bg:"#2a1f00",l:"Provisioning",pulse:true},
+  deployed:       {c:"#22c55e",bg:"#0d2818",l:"Deployed",pulse:false},
+  failed:         {c:"#ef4444",bg:"#2a0d0d",l:"Failed",pulse:false},
+  updating:       {c:"#3b82f6",bg:"#0d1f2a",l:"Updating",pulse:true},
+  "update-failed":{c:"#f97316",bg:"#2a1500",l:"Update Failed",pulse:false},
+  decommissioning:{c:"#f97316",bg:"#2a1500",l:"Decommissioning",pulse:true},
+  decommissioned: {c:"#6b7280",bg:"#1a1a1a",l:"Decommissioned",pulse:false},
+};
+
+let selectedType = "vm";
+let extraTags    = [{k:"",v:""}];
+let inventory    = [];
+let history      = [];
+let editingId    = null;
+let invFilter    = "all";
+let invSearch    = "";
+let tfVisible    = false;
+
+// ─────────────────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────────────────
+function init() {
+  inventory = JSON.parse(JSON.stringify(DEMO_INV));
+  history   = JSON.parse(JSON.stringify(DEMO_HIST));
+  renderTypeGrid();
+  renderFields();
+  renderExtraTags();
+  livePreview();
+  renderAll();
+}
+
+function renderAll() {
+  renderStats();
+  renderInv();
+  renderHistory();
+  renderFilterBtns();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Type grid
+// ─────────────────────────────────────────────────────────────
+function renderTypeGrid() {
+  document.getElementById("type-grid").innerHTML = Object.entries(RT).map(([k,rt])=>`
+    <button class="type-btn ${selectedType===k?"on":""}" style="${selectedType===k?`border-color:${rt.color};background:${rt.color}18`:``}" onclick="selectType('${k}')">
+      <span class="type-emoji">${rt.icon}</span>
+      <span class="type-lbl">${rt.label}</span>
+    </button>`).join('');
+}
+function selectType(t) { selectedType=t; renderTypeGrid(); renderFields(); livePreview(); }
+
+// ─────────────────────────────────────────────────────────────
+// Provision form fields
+// ─────────────────────────────────────────────────────────────
+function renderFields() {
+  const rt = RT[selectedType];
+  document.getElementById("resource-fields-label").textContent = `${rt.icon} ${rt.label} Configuration`;
+  document.getElementById("resource-fields").innerHTML = rt.fields.map(f=>`
+    <div class="fl">
+      <label class="fl-lbl">${f.l}${f.req?" *":""}${f.im?" 🔒":""}</label>
+      ${f.t==="select"
+        ? `<select id="pf-${f.n}" onchange="livePreview()"><option value="">Select…</option>${(f.opts||[]).map(o=>`<option>${o}</option>`).join('')}</select>`
+        : `<input type="${f.t||"text"}" id="pf-${f.n}" placeholder="${f.ph||""}" oninput="livePreview()">`}
+    </div>`).join('');
+}
+function pf(n) { const el=document.getElementById(`pf-${n}`); return el?el.value:""; }
+
+// ─────────────────────────────────────────────────────────────
+// Extra tags
+// ─────────────────────────────────────────────────────────────
+function renderExtraTags() {
+  document.getElementById("extra-tags").innerHTML = extraTags.map((t,i)=>`
+    <div class="tag-row">
+      <input placeholder="key" value="${t.k}" oninput="extraTags[${i}].k=this.value;livePreview()">
+      <input placeholder="value" value="${t.v}" oninput="extraTags[${i}].v=this.value">
+      <button class="icon-btn" onclick="removeTag(${i})">✕</button>
+    </div>`).join('');
+}
+function addTag()    { extraTags.push({k:"",v:""}); renderExtraTags(); }
+function removeTag(i){ extraTags.splice(i,1); renderExtraTags(); livePreview(); }
+
+// ─────────────────────────────────────────────────────────────
+// TF Preview
+// ─────────────────────────────────────────────────────────────
+function livePreview() {
+  const ticket=document.getElementById("prov-ticket").value||"TICKET-000";
+  const env=document.getElementById("prov-env").value;
+  const name=pf("name")||"resource-name";
+  const loc=pf("location")||"East US";
+  const customTags=extraTags.filter(t=>t.k).reduce((a,t)=>({...a,[t.k]:t.v}),{});
+  const allTags={ticket,environment:env,managed_by:"terraform-portal",deployment_id:"<uuid>","created_at":"<timestamp>",...customTags};
+  const tagsStr=Object.entries(allTags).map(([k,v])=>`    ${k} = "${v}"`).join("\n");
+
+  const tmpls = {
+    vm:`resource "azurerm_linux_virtual_machine" "vm" {\n  name           = "${name}"\n  location       = "${loc}"\n  size           = "${pf("vmSize")||"Standard_B2s"}"\n  admin_username = "${pf("adminUsername")||"azureuser"}"\n\n  os_disk {\n    storage_account_type = "${pf("diskType")||"Standard_LRS"}"\n    disk_size_gb         = ${pf("osDiskSizeGb")||30}\n  }\n\n  source_image_reference {\n    publisher = "Canonical"\n    sku       = "20_04-lts"\n    version   = "latest"\n  }\n\n  tags = {\n${tagsStr}\n  }\n}`,
+    storage:`resource "azurerm_storage_account" "storage" {\n  name                     = "${name}"\n  location                 = "${loc}"\n  account_tier             = "${pf("tier")||"Standard"}"\n  account_replication_type = "${pf("replication")||"LRS"}"\n  min_tls_version          = "TLS1_2"\n\n  blob_properties {\n    versioning_enabled = ${pf("versioning")||"false"}\n    delete_retention_policy { days = ${pf("retentionDays")||7} }\n  }\n\n  tags = {\n${tagsStr}\n  }\n}`,
+    aks:`resource "azurerm_kubernetes_cluster" "aks" {\n  name       = "${name}"\n  location   = "${loc}"\n  dns_prefix = "${name}"\n  kubernetes_version = "${pf("k8sVersion")||"1.28"}"\n\n  default_node_pool {\n    name       = "default"\n    node_count = ${pf("nodeCount")||2}\n    vm_size    = "${pf("vmSize")||"Standard_D2_v2"}"\n  }\n\n  identity { type = "SystemAssigned" }\n\n  tags = {\n${tagsStr}\n  }\n}`,
+    sql:`resource "azurerm_mssql_database" "db" {\n  name      = "${name}"\n  server_id = azurerm_mssql_server.sql.id\n  sku_name  = "${pf("sku")||"Basic"}"\n  max_size_gb = ${pf("maxSizeGb")||2}\n\n  tags = {\n${tagsStr}\n  }\n}`,
+    keyvault:`resource "azurerm_key_vault" "kv" {\n  name                       = "${name}"\n  location                   = "${loc}"\n  sku_name                   = "${pf("sku")||"standard"}"\n  tenant_id                  = data.azurerm_client_config.current.tenant_id\n  soft_delete_retention_days = ${pf("softDeleteRetention")||7}\n  enable_rbac_authorization  = true\n\n  tags = {\n${tagsStr}\n  }\n}`,
+    vnet:`resource "azurerm_virtual_network" "vnet" {\n  name          = "${name}"\n  location      = "${loc}"\n  address_space = ["${pf("addressSpace")||"10.0.0.0/16"}"]\n  dns_servers   = [${pf("dnsServers")?`"${pf("dnsServers")}"`:""}]\n\n  tags = {\n${tagsStr}\n  }\n}`,
+  };
+  document.getElementById("tf-code").textContent = tmpls[selectedType]||"";
+
+  // auto tags
+  document.getElementById("auto-tags-display").innerHTML = Object.entries({
+    ticket,environment:env,managed_by:"terraform-portal","deployment_id":"<uuid>","created_at":"<ts>"
+  }).map(([k,v])=>`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><code style="font-size:10px;color:#79c0ff;background:#1c2c3e;padding:1px 6px;border-radius:3px">${k}</code><span style="font-size:10px;color:#8b949e">${v}</span></div>`).join('');
+}
+
+function togglePreview() {
+  tfVisible=!tfVisible;
+  document.getElementById("tf-code").style.display=tfVisible?"block":"none";
+  document.getElementById("tf-placeholder").style.display=tfVisible?"none":"block";
+  document.querySelector("#view-provision .card button.btn-ghost").textContent=tfVisible?"Hide ▲":"Preview ▼";
+}
+
+// ─────────────────────────────────────────────────────────────
+// Provision
+// ─────────────────────────────────────────────────────────────
+function handleProvision() {
+  const ticket=document.getElementById("prov-ticket").value;
+  const env=document.getElementById("prov-env").value;
+  const who=document.getElementById("prov-who").value;
+  const rt=RT[selectedType];
+  const missing=rt.fields.filter(f=>f.req&&!pf(f.n));
+  if(missing.length){toast(`Required: ${missing.map(f=>f.l).join(", ")}`, "err");return;}
+  if(!ticket){toast("Ticket number is required","err");return;}
+
+  const config={};
+  rt.fields.forEach(f=>{const v=pf(f.n);if(v)config[f.n]=v;});
+  const customTags=extraTags.filter(t=>t.k).reduce((a,t)=>({...a,[t.k]:t.v}),{});
+  const id="dep-"+Math.random().toString(36).slice(2,10);
+  const now=new Date().toISOString();
+  const allTags={ticket,environment:env,managed_by:"terraform-portal",deployment_id:id,...customTags};
+
+  const entry={
+    id,ticketNumber:ticket,resourceType:selectedType,resourceName:config.name||"resource",
+    environment:env,requestedBy:who||"anonymous",config,tags:allTags,
+    status:"provisioning",createdAt:now,updatedAt:now,lastUpdatedAt:null,
+    outputs:{},logs:[`[${now}] → Provisioning started`],
+    changeHistory:[{action:"provision",timestamp:now,actor:who||"anonymous",ticket,changes:config}]
+  };
+  inventory.unshift(entry);
+
+  const steps=[
+    "Initializing provider plugins...",
+    "Terraform initialized successfully",
+    "Validating configuration...",
+    `Plan: 1 to add, 0 to change, 0 to destroy`,
+    `azurerm_resource_group.rg: Creating...`,
+    `azurerm_resource_group.rg: Creation complete`,
+    `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.`
+  ];
+  let i=0;
+  const adv=()=>{
+    if(i<steps.length){
+      entry.logs.push(`[${new Date().toISOString()}] ${steps[i++]}`);
+      renderAll();
+      setTimeout(adv,900+Math.random()*600);
+    } else {
+      entry.status="deployed";
+      entry.lastUpdatedAt=new Date().toISOString();
+      history.unshift({id:Math.random().toString(36).slice(2),deploymentId:id,action:"provision",actor:who||"anonymous",result:"success",timestamp:new Date().toISOString(),changes:config});
+      renderAll();
+      toast(`✓ ${entry.resourceName} provisioned!`);
+    }
+  };
+  setTimeout(adv,600);
+
+  toast(`Provisioning started — ID: ${id.slice(0,12)}…`);
+  document.getElementById("prov-ticket").value="";
+  document.getElementById("prov-who").value="";
+  switchTab("inventory");
+  renderAll();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Inventory rendering
+// ─────────────────────────────────────────────────────────────
+function filterInv(v){invSearch=v;renderInv();}
+function renderFilterBtns(){
+  const filters=["all","deployed","provisioning","updating","decommissioned","failed"];
+  document.getElementById("filter-btns").innerHTML=filters.map(f=>`
+    <button class="filter-btn ${invFilter===f?"on":""}" onclick="setFilter('${f}')">${f}</button>`).join('');
+}
+function setFilter(f){invFilter=f;renderFilterBtns();renderInv();}
+
+function renderInv() {
+  const shown=inventory.filter(r=>{
+    const ms=invFilter==="all"||r.status===invFilter||(invFilter==="failed"&&r.status==="update-failed")||(invFilter==="deployed"&&r.status==="updating");
+    const mq=!invSearch||r.resourceName?.toLowerCase().includes(invSearch.toLowerCase())||r.ticketNumber?.toLowerCase().includes(invSearch.toLowerCase());
+    return ms&&mq;
+  });
+  if(!shown.length){document.getElementById("inv-grid").innerHTML=`<div style="text-align:center;padding:50px;color:#8b949e;grid-column:1/-1"><div style="font-size:36px;margin-bottom:10px">📭</div>No resources found.</div>`;return;}
+  document.getElementById("inv-grid").innerHTML=shown.map(r=>renderCard(r)).join('');
+}
+
+function renderCard(r) {
+  const rt=RT[r.resourceType]||{icon:"📦",label:r.resourceType,color:"#666"};
+  const sc=STATUS[r.status]||STATUS.provisioning;
+  const canUpd=r.status==="deployed";
+  const canDec=["deployed","failed","update-failed"].includes(r.status);
+  const logLine=r.logs?.slice(-1)[0]||"";
+  const envBg=r.environment==="prod"?"#2a1818":r.environment==="staging"?"#2a1e00":"#0d2818";
+  return `
+  <div class="res-card" style="border-color:${sc.pulse?sc.c+"55":"#30363d"}">
+    <div class="res-hdr">
+      <span class="res-icon">${rt.icon}</span>
+      <div style="flex:1">
+        <div class="res-name">${r.resourceName}</div>
+        <div class="res-type">${rt.label}</div>
+      </div>
+      <span class="badge" style="background:${sc.bg};color:${sc.c};border-color:${sc.c}55">
+        ${sc.pulse?`<span class="dot"></span>`:""}${sc.l}
+      </span>
+    </div>
+    <div class="res-meta">
+      <div class="meta">🎫 <code>${r.ticketNumber}</code></div>
+      <div class="meta">👤 ${r.requestedBy||"—"}</div>
+      <div class="meta" style="background:${envBg};padding:1px 6px;border-radius:4px;color:#c9d1d9">${(r.environment||"dev").toUpperCase()}</div>
+      <div class="meta">📅 ${fmtDate(r.createdAt)}</div>
+      ${r.lastUpdatedAt?`<div class="meta">✏️ ${fmtDate(r.lastUpdatedAt)}</div>`:""}
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:8px">
+      ${Object.entries(r.tags||{}).slice(0,5).map(([k,v])=>`<span class="tag-pill">${k}: ${v}</span>`).join('')}
+    </div>
+    ${logLine?`<div class="log-peek">${logLine}</div>`:""}
+    <div class="res-actions">
+      <button class="btn-ghost" onclick="toggleExpand('${r.id}')">▼ Details</button>
+      ${canUpd?`<button class="btn-update" onclick="openUpdate('${r.id}')">✏️ Update</button>`:""}
+      ${canDec?`<button class="btn-decomm" onclick="openDecomm('${r.id}')">🗑️ Decommission</button>`:""}
+    </div>
+    <div class="expanded-panel" id="exp-${r.id}">
+      <div class="exp-grid">
+        <div>
+          <div class="exp-lbl">Deployment ID</div>
+          <code style="font-size:9px;color:#79c0ff;word-break:break-all">${r.id}</code>
+          <div class="exp-lbl">Configuration</div>
+          <pre class="mini">${JSON.stringify(r.config,null,2)}</pre>
+        </div>
+        <div>
+          <div class="exp-lbl">All Tags</div>
+          <pre class="mini">${JSON.stringify(r.tags,null,2)}</pre>
+          ${r.outputs&&Object.keys(r.outputs).length?`<div class="exp-lbl">Outputs</div><pre class="mini">${JSON.stringify(r.outputs,null,2)}</pre>`:""}
+        </div>
+      </div>
+      ${r.changeHistory?.length?`
+        <div class="exp-lbl">Change History</div>
+        ${r.changeHistory.map(ch=>`<div class="ch-item">
+          <span style="color:${ch.action==="provision"?"#22c55e":ch.action==="update"?"#3b82f6":"#ef4444"};font-weight:700;text-transform:uppercase;font-size:10px">${ch.action}</span>
+          <span style="color:#8b949e;font-size:10px;margin-left:8px">${fmtDateFull(ch.timestamp)}</span>
+          <span style="color:#8b949e;font-size:10px;margin-left:8px">by ${ch.actor}</span>
+          <span style="color:#f59e0b;font-size:10px;margin-left:8px">#${ch.ticket}</span>
+          ${ch.reason?`<span style="color:#8b949e;font-size:10px;margin-left:8px">· ${ch.reason}</span>`:""}
+        </div>`).join('')}
+      `:""}
+      <div class="exp-lbl">Full Logs</div>
+      <pre class="mini" style="color:#7ee787;max-height:120px">${(r.logs||[]).join("\n")||"(none)"}</pre>
+    </div>
+  </div>`;
+}
+
+function toggleExpand(id) {
+  const el=document.getElementById(`exp-${id}`);
+  el.classList.toggle("on");
+}
+
+// ─────────────────────────────────────────────────────────────
+// Update Modal
+// ─────────────────────────────────────────────────────────────
+let updatingConfig={};
+function openUpdate(id) {
+  editingId=id;
+  const r=inventory.find(x=>x.id===id);
+  const rt=RT[r.resourceType];
+  document.getElementById("update-title").textContent=`✏️ Update — ${r.resourceName}`;
+  document.getElementById("upd-ticket").value=r.ticketNumber;
+  document.getElementById("upd-who").value="";
+  updatingConfig={...r.config};
+
+  const updatable=rt.updatable||[];
+  const fields=rt.fields.filter(f=>updatable.includes(f.n));
+  document.getElementById("update-fields").innerHTML=fields.map(f=>`
+    <div class="fl">
+      <label class="fl-lbl">${f.l}</label>
+      ${f.t==="select"
+        ? `<select id="upd-${f.n}"><option value="">Select…</option>${(f.opts||[]).map(o=>`<option ${r.config[f.n]===o?"selected":""}>${o}</option>`).join('')}</select>`
+        : `<input type="${f.t||"text"}" id="upd-${f.n}" value="${r.config[f.n]||""}" placeholder="${f.ph||""}">`}
+    </div>`).join('');
+
+  // reset step
+  document.getElementById("update-step2").style.display="none";
+  document.getElementById("upd-preview-btn").style.display="";
+  document.getElementById("upd-apply-btn").style.display="none";
+  document.getElementById("upd-back-btn").style.display="none";
+
+  document.getElementById("modal-update").classList.add("on");
+}
+
+function updatePreview() {
+  const r=inventory.find(x=>x.id===editingId);
+  const rt=RT[r.resourceType];
+  const updatable=rt.updatable||[];
+  const fields=rt.fields.filter(f=>updatable.includes(f.n));
+  const diff={};
+  fields.forEach(f=>{
+    const el=document.getElementById(`upd-${f.n}`);
+    const newVal=el?el.value:"";
+    if(newVal&&newVal!==r.config[f.n]) diff[f.n]={from:r.config[f.n]||"(not set)",to:newVal};
+  });
+  if(!Object.keys(diff).length){toast("No changes detected","err");return;}
+
+  document.getElementById("diff-list").innerHTML=Object.entries(diff).map(([k,{from,to}])=>`
+    <div class="diff-item">
+      <div class="diff-key">${k}</div>
+      <div style="margin-top:4px;display:flex;gap:12px">
+        <span class="diff-from">− ${from}</span>
+        <span class="diff-to">+ ${to}</span>
+      </div>
+    </div>`).join('');
+
+  document.getElementById("update-step2").style.display="block";
+  document.getElementById("upd-preview-btn").style.display="none";
+  document.getElementById("upd-apply-btn").style.display="";
+  document.getElementById("upd-back-btn").style.display="";
+  updatingConfig=diff;
+}
+
+function updateBack(){
+  document.getElementById("update-step2").style.display="none";
+  document.getElementById("upd-preview-btn").style.display="";
+  document.getElementById("upd-apply-btn").style.display="none";
+  document.getElementById("upd-back-btn").style.display="none";
+}
+
+function applyUpdate(){
+  const r=inventory.find(x=>x.id===editingId);
+  const ticket=document.getElementById("upd-ticket").value;
+  const who=document.getElementById("upd-who").value;
+  const now=new Date().toISOString();
+  // apply changes
+  Object.entries(updatingConfig).forEach(([k,{to}])=>{ r.config[k]=to; });
+  r.status="updating";
+  r.updatedAt=now;
+  r.logs.push(`[${now}] → Update started`);
+  if(!r.changeHistory)r.changeHistory=[];
+  r.changeHistory.push({action:"update",timestamp:now,actor:who||"anonymous",ticket,diff:updatingConfig});
+  closeModal("update");
+  renderAll();
+  toast(`Update started for ${r.resourceName}`);
+
+  const steps=["Terraform initialized","Configuration valid",`Plan: 0 to add, ${Object.keys(updatingConfig).length} to change, 0 to destroy`,`Applying changes...`,"Apply complete!"];
+  let i=0;
+  const adv=()=>{
+    if(i<steps.length){r.logs.push(`[${new Date().toISOString()}] ${steps[i++]}`);renderAll();setTimeout(adv,1000+Math.random()*500);}
+    else{
+      r.status="deployed";r.lastUpdatedAt=new Date().toISOString();
+      history.unshift({id:Math.random().toString(36).slice(2),deploymentId:r.id,action:"update",actor:who||"anonymous",result:"success",timestamp:new Date().toISOString(),changes:updatingConfig});
+      renderAll();toast(`✓ ${r.resourceName} updated successfully!`);
+    }
+  };
+  setTimeout(adv,600);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Decommission Modal
+// ─────────────────────────────────────────────────────────────
+function openDecomm(id){
+  editingId=id;
+  const r=inventory.find(x=>x.id===id);
+  document.getElementById("decomm-title").textContent=`🗑️ Decommission — ${r.resourceName}`;
+  document.getElementById("dec-ticket").value=r.ticketNumber;
+  document.getElementById("dec-who").value="";
+  document.getElementById("dec-reason").value="";
+  document.getElementById("dec-confirm").value="";
+  document.getElementById("dec-confirm-lbl").textContent=`Type "${r.resourceName}" to confirm`;
+  document.getElementById("dec-confirm").placeholder=r.resourceName;
+  document.getElementById("dec-btn").disabled=true;
+  document.getElementById("modal-decomm").classList.add("on");
+}
+
+function checkDecomm(){
+  const r=inventory.find(x=>x.id===editingId);
+  const v=document.getElementById("dec-confirm").value;
+  document.getElementById("dec-btn").disabled=(v!==r.resourceName);
+  document.getElementById("dec-confirm").style.borderColor=v===r.resourceName?"#22c55e":"#30363d";
+}
+
+function applyDecommission(){
+  const r=inventory.find(x=>x.id===editingId);
+  const ticket=document.getElementById("dec-ticket").value;
+  const who=document.getElementById("dec-who").value;
+  const reason=document.getElementById("dec-reason").value;
+  const now=new Date().toISOString();
+  r.status="decommissioning";
+  r.updatedAt=now;
+  r.logs.push(`[${now}] → Decommission started`);
+  if(!r.changeHistory)r.changeHistory=[];
+  r.changeHistory.push({action:"decommission",timestamp:now,actor:who||"anonymous",ticket,reason});
+  closeModal("decomm");
+  renderAll();
+  toast(`Decommissioning ${r.resourceName}…`);
+
+  const steps=[`terraform plan -destroy...`,`Plan: 0 to add, 0 to change, 1 to destroy`,`azurerm_resource_group.rg: Destroying...`,`Destroy complete! Resources: 1 destroyed.`];
+  let i=0;
+  const adv=()=>{
+    if(i<steps.length){r.logs.push(`[${new Date().toISOString()}] ${steps[i++]}`);renderAll();setTimeout(adv,1000+Math.random()*600);}
+    else{
+      r.status="decommissioned";r.decommissionedAt=new Date().toISOString();
+      history.unshift({id:Math.random().toString(36).slice(2),deploymentId:r.id,action:"decommission",actor:who||"anonymous",result:"success",timestamp:new Date().toISOString(),changes:{reason}});
+      renderAll();toast(`🗑️ ${r.resourceName} decommissioned`);
+    }
+  };
+  setTimeout(adv,800);
+}
+
+function closeModal(m){document.getElementById(`modal-${m}`).classList.remove("on");}
+
+// ─────────────────────────────────────────────────────────────
+// History
+// ─────────────────────────────────────────────────────────────
+function renderHistory(){
+  const AC={provision:"#22c55e",update:"#3b82f6",decommission:"#ef4444"};
+  const RC={success:"#22c55e",failure:"#ef4444"};
+  document.getElementById("history-list").innerHTML=history.length
+    ? history.map(h=>`<div class="hist-item">
+        <div style="width:8px;height:8px;border-radius:50%;background:${RC[h.result]||"#666"};flex-shrink:0"></div>
+        <div style="flex:1">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <span style="font-weight:700;color:${AC[h.action]||"#c9d1d9"};text-transform:uppercase;font-size:10px">${h.action}</span>
+            <code style="font-size:10px;color:#79c0ff;background:#1c2c3e;padding:1px 5px;border-radius:3px">${h.deploymentId?.slice(0,10)}…</code>
+            <span style="font-size:10px;color:#8b949e">by ${h.actor}</span>
+            ${h.changes?.ticket?`<span style="font-size:10px;color:#f59e0b">#${h.changes.ticket}</span>`:""}
+          </div>
+        </div>
+        <div style="font-size:10px;color:#8b949e;flex-shrink:0">${fmtDateFull(h.timestamp)}</div>
+        <span style="font-size:10px;font-weight:600;color:${RC[h.result]||"#666"}">${h.result}</span>
+      </div>`).join('')
+    : `<div style="text-align:center;padding:50px;color:#8b949e"><div style="font-size:36px;margin-bottom:10px">📭</div>No history yet.</div>`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Stats
+// ─────────────────────────────────────────────────────────────
+function renderStats(){
+  const s={
+    deployed:inventory.filter(r=>r.status==="deployed").length,
+    provisioning:inventory.filter(r=>r.status==="provisioning").length,
+    updating:inventory.filter(r=>r.status==="updating").length,
+    failed:inventory.filter(r=>["failed","update-failed"].includes(r.status)).length,
+    decommissioned:inventory.filter(r=>r.status==="decommissioned").length,
+  };
+  document.getElementById("stat-strip").innerHTML=[
+    ["deployed",s.deployed,"#22c55e"],
+    ["provisioning",s.provisioning,"#f59e0b"],
+    ["updating",s.updating,"#3b82f6"],
+    ["failed",s.failed,"#ef4444"],
+    ["decommissioned",s.decommissioned,"#6b7280"],
+  ].map(([l,v,c])=>`<div class="stat-chip"><b style="color:${c}">${v}</b><span style="color:#6b7280"> ${l}</span></div>`).join('');
+  document.querySelectorAll(".nb")[1].textContent=`📋 Resources (${inventory.length})`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
+function switchTab(t){
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("on"));
+  document.getElementById(`view-${t}`).classList.add("on");
+  document.querySelectorAll(".nb").forEach(b=>b.classList.remove("on"));
+  document.querySelectorAll(".nb")[["provision","inventory","history"].indexOf(t)].classList.add("on");
+  if(t==="inventory")renderAll();
+}
+
+function toast(msg,type="ok"){
+  const el=document.getElementById("toast");
+  el.style.display="flex";
+  el.style.background=type==="err"?"#7f1d1d":"#14532d";
+  el.style.borderColor=type==="err"?"#ef4444":"#22c55e";
+  el.innerHTML=`<span>${type==="err"?"⚠":"✓"}</span><span>${msg}</span>`;
+  clearTimeout(toast._t);
+  toast._t=setTimeout(()=>el.style.display="none",5000);
+}
+
+function fmtDate(d){return d?new Date(d).toLocaleDateString():"—";}
+function fmtDateFull(d){return d?new Date(d).toLocaleString():"—";}
+
+// ─────────────────────────────────────────────────────────────
+// Demo data
+// ─────────────────────────────────────────────────────────────
+const now=Date.now();
+const DEMO_INV=[
+  {id:"d1",ticketNumber:"JIRA-2841",resourceType:"vm",resourceName:"prod-api-vm-01",environment:"prod",requestedBy:"alice.wong",config:{name:"prod-api-vm-01",location:"East US",vmSize:"Standard_D2s_v3",adminUsername:"azureuser",diskType:"Premium_LRS",osDiskSizeGb:"64"},tags:{ticket:"JIRA-2841",environment:"prod",managed_by:"terraform-portal",deployment_id:"d1",team:"platform"},status:"deployed",createdAt:new Date(now-172800000).toISOString(),lastUpdatedAt:new Date(now-86400000).toISOString(),outputs:{},logs:["✓ Terraform initialized","✓ Apply complete! 1 added."],changeHistory:[{action:"provision",timestamp:new Date(now-172800000).toISOString(),actor:"alice.wong",ticket:"JIRA-2841",changes:{name:"prod-api-vm-01"}},{action:"update",timestamp:new Date(now-86400000).toISOString(),actor:"bob.smith",ticket:"JIRA-2902",diff:{vmSize:{from:"Standard_B2s",to:"Standard_D2s_v3"}}}]},
+  {id:"d2",ticketNumber:"CHG-1045",resourceType:"storage",resourceName:"prodlogstorage",environment:"prod",requestedBy:"bob.smith",config:{name:"prodlogstorage",location:"West Europe",tier:"Standard",replication:"GRS",versioning:"true",retentionDays:"30"},tags:{ticket:"CHG-1045",environment:"prod",managed_by:"terraform-portal",deployment_id:"d2"},status:"deployed",createdAt:new Date(now-360000000).toISOString(),outputs:{},logs:["✓ Apply complete! 1 added."],changeHistory:[{action:"provision",timestamp:new Date(now-360000000).toISOString(),actor:"bob.smith",ticket:"CHG-1045",changes:{}}]},
+  {id:"d3",ticketNumber:"JIRA-3100",resourceType:"aks",resourceName:"staging-k8s-01",environment:"staging",requestedBy:"carol.jones",config:{name:"staging-k8s-01",location:"East US",nodeCount:"2",vmSize:"Standard_D4_v2",k8sVersion:"1.28"},tags:{ticket:"JIRA-3100",environment:"staging",managed_by:"terraform-portal",deployment_id:"d3"},status:"updating",createdAt:new Date(now-43200000).toISOString(),lastUpdatedAt:new Date(now-600000).toISOString(),outputs:{},logs:["→ Update started","✓ Terraform initialized","✓ Plan: 0 to add, 1 to change"],changeHistory:[{action:"provision",timestamp:new Date(now-43200000).toISOString(),actor:"carol.jones",ticket:"JIRA-3100",changes:{}},{action:"update",timestamp:new Date(now-600000).toISOString(),actor:"carol.jones",ticket:"JIRA-3101",diff:{nodeCount:{from:"2",to:"3"}}}]},
+  {id:"d4",ticketNumber:"INC-0099",resourceType:"sql",resourceName:"legacy-reports-db",environment:"dev",requestedBy:"dave.kim",config:{name:"legacy-reports-db",location:"East US",adminLogin:"sqladmin",sku:"Basic",maxSizeGb:"2"},tags:{ticket:"INC-0099",environment:"dev",managed_by:"terraform-portal",deployment_id:"d4"},status:"decommissioned",createdAt:new Date(now-604800000).toISOString(),decommissionedAt:new Date(now-86000000).toISOString(),outputs:{},logs:["✓ Destroy complete! 1 destroyed."],changeHistory:[{action:"provision",timestamp:new Date(now-604800000).toISOString(),actor:"dave.kim",ticket:"INC-0099",changes:{}},{action:"decommission",timestamp:new Date(now-86000000).toISOString(),actor:"dave.kim",ticket:"INC-0099",reason:"Project retired"}]},
+];
+const DEMO_HIST=[
+  {id:"h1",deploymentId:"d1",action:"provision",actor:"alice.wong",result:"success",timestamp:new Date(now-172800000).toISOString(),changes:{ticket:"JIRA-2841"}},
+  {id:"h2",deploymentId:"d1",action:"update",actor:"bob.smith",result:"success",timestamp:new Date(now-86400000).toISOString(),changes:{ticket:"JIRA-2902",vmSize:{from:"Standard_B2s",to:"Standard_D2s_v3"}}},
+  {id:"h3",deploymentId:"d2",action:"provision",actor:"bob.smith",result:"success",timestamp:new Date(now-360000000).toISOString(),changes:{ticket:"CHG-1045"}},
+  {id:"h4",deploymentId:"d3",action:"provision",actor:"carol.jones",result:"success",timestamp:new Date(now-43200000).toISOString(),changes:{ticket:"JIRA-3100"}},
+  {id:"h5",deploymentId:"d4",action:"provision",actor:"dave.kim",result:"success",timestamp:new Date(now-604800000).toISOString(),changes:{ticket:"INC-0099"}},
+  {id:"h6",deploymentId:"d4",action:"decommission",actor:"dave.kim",result:"success",timestamp:new Date(now-86000000).toISOString(),changes:{ticket:"INC-0099",reason:"Project retired"}},
+];
+
+init();
+</script>
+</body>
+</html>

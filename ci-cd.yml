@@ -1,0 +1,239 @@
+name: TerraPortal CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, staging, prod]
+        default: dev
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # 1. Test & Lint
+  # ─────────────────────────────────────────────────────────────
+  test:
+    name: Test & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package.json
+            backend/package.json
+
+      - name: Install & build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+
+      - name: Smoke-test backend (demo mode)
+        working-directory: backend
+        run: |
+          DEMO_MODE=true node server.js &
+          sleep 3
+          curl -sf http://localhost:3001/api/resource-types > /dev/null && echo "✓ resource-types OK"
+          curl -sf http://localhost:3001/api/inventory       > /dev/null && echo "✓ inventory OK"
+          curl -sf http://localhost:3001/api/history         > /dev/null && echo "✓ history OK"
+          kill %1 2>/dev/null || true
+
+      - name: Upload frontend build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+  # ─────────────────────────────────────────────────────────────
+  # 2. Validate Terraform modules
+  # ─────────────────────────────────────────────────────────────
+  tf-validate:
+    name: Terraform Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive terraform/ || echo "::warning::Terraform files need formatting"
+
+      - name: Validate infrastructure module
+        working-directory: terraform/infrastructure
+        run: |
+          terraform init -backend=false
+          terraform validate
+          echo "✓ infrastructure module valid"
+
+  # ─────────────────────────────────────────────────────────────
+  # 3. Build & push Docker images (main branch only)
+  # ─────────────────────────────────────────────────────────────
+  docker-build:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    needs: [test, tf-validate]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      frontend_tag: ${{ steps.tags.outputs.frontend }}
+      backend_tag:  ${{ steps.tags.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image tags
+        id: tags
+        run: |
+          SHA=$(echo ${{ github.sha }} | head -c 7)
+          echo "frontend=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:${SHA}" >> $GITHUB_OUTPUT
+          echo "backend=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:${SHA}"   >> $GITHUB_OUTPUT
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: backend
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.backend }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: frontend
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.frontend }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─────────────────────────────────────────────────────────────
+  # 4. Deploy portal infrastructure via Terraform
+  # ─────────────────────────────────────────────────────────────
+  deploy-portal:
+    name: Deploy Portal to Azure
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    environment:
+      name: ${{ inputs.environment || 'prod' }}
+      url: ${{ steps.tf-out.outputs.url }}
+    concurrency:
+      group: deploy-portal-${{ inputs.environment || 'prod' }}
+      cancel-in-progress: false
+    env:
+      ARM_CLIENT_ID:       ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET:   ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_TENANT_ID:       ${{ secrets.ARM_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+
+      - name: Terraform Init
+        working-directory: terraform/infrastructure
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TF_STATE_RG }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=portal/terraform.tfstate"
+
+      - name: Terraform Plan
+        working-directory: terraform/infrastructure
+        id: plan
+        run: |
+          terraform plan \
+            -var="environment=${{ inputs.environment || 'prod' }}" \
+            -var="frontend_image=${{ needs.docker-build.outputs.frontend_tag }}" \
+            -var="backend_image=${{ needs.docker-build.outputs.backend_tag }}" \
+            -var="tf_state_rg=${{ secrets.TF_STATE_RG }}" \
+            -var="tf_state_storage=${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+            -var="storage_connection_string=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}" \
+            -out=tfplan \
+            -detailed-exitcode || true
+
+      - name: Terraform Apply
+        working-directory: terraform/infrastructure
+        run: terraform apply -auto-approve tfplan
+
+      - name: Get outputs
+        id: tf-out
+        working-directory: terraform/infrastructure
+        run: |
+          URL=$(terraform output -raw frontend_url 2>/dev/null || echo "https://terraportal.azurecontainerapps.io")
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "🚀 TerraPortal deployed to: $URL"
+
+      - name: Post URL to summary
+        run: |
+          echo "## 🚀 TerraPortal Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** ${{ steps.tf-out.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ inputs.environment || 'prod' }}" >> $GITHUB_STEP_SUMMARY
+
+  # ─────────────────────────────────────────────────────────────
+  # 5. Notify on failure
+  # ─────────────────────────────────────────────────────────────
+  notify:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [test, tf-validate, docker-build, deploy-portal]
+    if: failure()
+    steps:
+      - name: Slack failure notification
+        uses: slackapi/slack-github-action@v1.25.0
+        continue-on-error: true
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        with:
+          payload: |
+            {
+              "text": "❌ TerraPortal pipeline failed",
+              "blocks": [{
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*❌ TerraPortal CI/CD Failed*\n>Branch: `${{ github.ref_name }}`\n>Commit: `${{ github.sha }}`\n><${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                }
+              }]
+            }

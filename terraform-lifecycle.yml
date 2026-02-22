@@ -1,0 +1,225 @@
+name: Terraform Resource Lifecycle
+
+# Triggered by the TerraPortal backend via GitHub API (repository_dispatch)
+# OR manually via workflow_dispatch for debugging.
+on:
+  repository_dispatch:
+    types:
+      - terraform-provision
+      - terraform-update
+      - terraform-decommission
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Lifecycle action
+        type: choice
+        options: [provision, update, decommission]
+        required: true
+      deployment_id:
+        description: Deployment ID
+        required: true
+      resource_type:
+        description: Azure resource type
+        type: choice
+        options: [vm, storage, aks, sql, keyvault, vnet]
+        required: true
+      environment:
+        description: Environment
+        type: choice
+        options: [dev, staging, prod, dr]
+        default: dev
+      ticket_number:
+        description: Ticket/Change number
+        required: true
+
+jobs:
+  terraform:
+    name: Terraform ${{ github.event.client_payload.action || inputs.action }} (${{ github.event.client_payload.resource_type || inputs.resource_type }})
+    runs-on: ubuntu-latest
+    concurrency:
+      group: tf-${{ github.event.client_payload.deployment_id || inputs.deployment_id }}
+      cancel-in-progress: false
+
+    env:
+      ARM_CLIENT_ID:       ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET:   ${{ secrets.ARM_CLIENT_SECRET }}
+      ARM_TENANT_ID:       ${{ secrets.ARM_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+      DEPLOYMENT_ID:       ${{ github.event.client_payload.deployment_id || inputs.deployment_id }}
+      ACTION:              ${{ github.event.client_payload.action || inputs.action }}
+      RESOURCE_TYPE:       ${{ github.event.client_payload.resource_type || inputs.resource_type }}
+      TICKET:              ${{ github.event.client_payload.ticket_number || inputs.ticket_number }}
+      ENVIRONMENT:         ${{ github.event.client_payload.environment || inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+
+      # ── Download workspace from Azure Blob ────────────────────────────────
+      - name: Download Terraform workspace from Azure Blob
+        run: |
+          mkdir -p workspace
+          az storage blob download \
+            --account-name ${{ secrets.TF_STATE_STORAGE_ACCOUNT }} \
+            --container-name deployments \
+            --name "${DEPLOYMENT_ID}/main.tf" \
+            --file workspace/main.tf \
+            --auth-mode login
+
+          az storage blob download \
+            --account-name ${{ secrets.TF_STATE_STORAGE_ACCOUNT }} \
+            --container-name deployments \
+            --name "${DEPLOYMENT_ID}/variables.tf" \
+            --file workspace/variables.tf \
+            --auth-mode login 2>/dev/null || echo "# no variables" > workspace/variables.tf
+
+          az storage blob download \
+            --account-name ${{ secrets.TF_STATE_STORAGE_ACCOUNT }} \
+            --container-name deployments \
+            --name "${DEPLOYMENT_ID}/outputs.tf" \
+            --file workspace/outputs.tf \
+            --auth-mode login 2>/dev/null || echo "# no outputs" > workspace/outputs.tf
+
+          echo "✓ Workspace downloaded"
+          cat workspace/main.tf | head -20
+
+      # ── Terraform Init ────────────────────────────────────────────────────
+      - name: Terraform Init
+        working-directory: workspace
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TF_STATE_RG }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=${DEPLOYMENT_ID}/terraform.tfstate"
+          echo "✓ Initialized — state key: ${DEPLOYMENT_ID}/terraform.tfstate"
+
+      # ── Terraform Validate ────────────────────────────────────────────────
+      - name: Terraform Validate
+        working-directory: workspace
+        run: terraform validate && echo "✓ Valid"
+
+      # ── Terraform Plan ────────────────────────────────────────────────────
+      - name: Terraform Plan
+        id: plan
+        working-directory: workspace
+        run: |
+          if [ "$ACTION" = "decommission" ]; then
+            terraform plan -destroy -out=tfplan -detailed-exitcode || EXIT=$?
+          else
+            terraform plan -out=tfplan -detailed-exitcode || EXIT=$?
+          fi
+          # Exit code 2 = changes present (expected), 0 = no changes, 1 = error
+          [ "${EXIT:-0}" -eq 1 ] && exit 1 || true
+          echo "✓ Plan complete"
+
+      # ── Terraform Apply / Destroy ─────────────────────────────────────────
+      - name: Terraform Apply
+        id: apply
+        working-directory: workspace
+        run: |
+          terraform apply -auto-approve tfplan 2>&1 | tee /tmp/tf-output.txt
+          echo "✓ $ACTION complete"
+
+      # ── Capture outputs ───────────────────────────────────────────────────
+      - name: Capture Terraform outputs
+        id: outputs
+        if: success() && env.ACTION != 'decommission'
+        working-directory: workspace
+        run: |
+          terraform output -json > /tmp/tf-outputs.json 2>/dev/null || echo "{}" > /tmp/tf-outputs.json
+          cat /tmp/tf-outputs.json
+
+      # ── Update inventory in portal ────────────────────────────────────────
+      - name: Update portal inventory on SUCCESS
+        if: success()
+        run: |
+          STATUS=""
+          case "$ACTION" in
+            provision)    STATUS="deployed" ;;
+            update)       STATUS="deployed" ;;
+            decommission) STATUS="decommissioned" ;;
+          esac
+
+          OUTPUTS=$(cat /tmp/tf-outputs.json 2>/dev/null || echo "{}")
+
+          curl -sS -X PATCH \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.PORTAL_API_TOKEN }}" \
+            "${{ secrets.PORTAL_API_URL }}/api/inventory/${DEPLOYMENT_ID}" \
+            -d "{
+              \"status\": \"$STATUS\",
+              \"outputs\": $OUTPUTS,
+              \"github_run_id\": \"${{ github.run_id }}\",
+              \"github_run_url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",
+              \"completed_at\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
+            }" || echo "⚠️ Warning: Could not update portal inventory (portal may be unreachable)"
+
+          echo "✓ Inventory updated: $STATUS"
+
+      - name: Update portal inventory on FAILURE
+        if: failure()
+        run: |
+          FAIL_STATUS="${ACTION}-failed"
+          [ "$ACTION" = "provision" ] && FAIL_STATUS="failed"
+
+          curl -sS -X PATCH \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.PORTAL_API_TOKEN }}" \
+            "${{ secrets.PORTAL_API_URL }}/api/inventory/${DEPLOYMENT_ID}" \
+            -d "{
+              \"status\": \"$FAIL_STATUS\",
+              \"github_run_id\": \"${{ github.run_id }}\",
+              \"error\": \"GitHub Actions run failed — see run logs\"
+            }" || true
+          echo "✗ Inventory marked as $FAIL_STATUS"
+
+      # ── Tag Azure resources ───────────────────────────────────────────────
+      - name: Apply GitHub metadata tags to Azure resources
+        if: success() && env.ACTION != 'decommission'
+        uses: azure/CLI@v1
+        with:
+          inlineScript: |
+            RG="rg-${{ github.event.client_payload.config.name || inputs.deployment_id }}-${ENVIRONMENT}"
+            RG_ID=$(az group show -n "$RG" --query id -o tsv 2>/dev/null || echo "")
+            if [ -n "$RG_ID" ]; then
+              az tag update \
+                --resource-id "$RG_ID" \
+                --operation merge \
+                --tags \
+                  github_run_id="${{ github.run_id }}" \
+                  github_actor="${{ github.actor }}" \
+                  ticket="${TICKET}" \
+                  last_action="${ACTION}" \
+                  action_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                > /dev/null 2>&1 || true
+              echo "✓ Azure tags updated"
+            fi
+
+      # ── Job summary ───────────────────────────────────────────────────────
+      - name: Write job summary
+        if: always()
+        run: |
+          STATUS=${{ job.status }}
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## Terraform ${{ env.ACTION }} — ${{ job.status }}
+
+          | Field | Value |
+          |-------|-------|
+          | Deployment ID | \`${DEPLOYMENT_ID}\` |
+          | Action | **${ACTION}** |
+          | Resource Type | ${RESOURCE_TYPE} |
+          | Environment | ${ENVIRONMENT} |
+          | Ticket | ${TICKET} |
+          | Actor | ${{ github.actor }} |
+          | State Key | \`${DEPLOYMENT_ID}/terraform.tfstate\` |
+          | State Storage | \`${{ secrets.TF_STATE_STORAGE_ACCOUNT }}/tfstate\` |
+          | Run | [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+          EOF

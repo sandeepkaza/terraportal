@@ -1,15 +1,12 @@
-FROM node:20-slim
-
-RUN apt-get update && apt-get install -y curl unzip && \
-    curl -sL https://aka.ms/InstallAzureCLIDeb | bash && \
-    curl -fsSL https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip -o tf.zip && \
-    unzip tf.zip && mv terraform /usr/local/bin/ && rm tf.zip && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
+FROM node:20-slim AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 COPY . .
+RUN npm run build
 
-EXPOSE 3001
-CMD ["node", "server.js"]
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

@@ -18,9 +18,7 @@ env:
   IMAGE_PREFIX: ${{ github.repository }}
 
 jobs:
-  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  # 1. Test & Lint
-  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
   test:
     name: Test & Build
     runs-on: ubuntu-latest
@@ -44,9 +42,9 @@ jobs:
         run: |
           DEMO_MODE=true node server.js &
           sleep 3
-          curl -sf http://localhost:3001/api/resource-types > /dev/null && echo "âœ“ resource-types OK"
-          curl -sf http://localhost:3001/api/inventory       > /dev/null && echo "âœ“ inventory OK"
-          curl -sf http://localhost:3001/api/history         > /dev/null && echo "âœ“ history OK"
+          curl -sf http://localhost:3001/api/resource-types > /dev/null && echo "resource-types OK"
+          curl -sf http://localhost:3001/api/inventory       > /dev/null && echo "inventory OK"
+          curl -sf http://localhost:3001/api/history         > /dev/null && echo "history OK"
           kill %1 2>/dev/null || true
 
       - name: Upload frontend build artifact
@@ -55,9 +53,6 @@ jobs:
           name: frontend-dist
           path: frontend/dist
 
-  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  # 2. Validate Terraform modules
-  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   tf-validate:
     name: Terraform Validate
     runs-on: ubuntu-latest
@@ -69,18 +64,15 @@ jobs:
           terraform_version: "1.7.5"
 
       - name: Check formatting
-        run: terraform fmt -check -recursive terraform/ || echo "::warning::Terraform files need formatting"
+        run: terraform fmt -check -recursive terraform/ || echo "Terraform files need formatting"
 
       - name: Validate infrastructure module
         working-directory: terraform/infrastructure
         run: |
           terraform init -backend=false
           terraform validate
-          echo "âœ“ infrastructure module valid"
+          echo "infrastructure module valid"
 
-  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  # 3. Build & push Docker images (main branch only)
-  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   docker-build:
     name: Build & Push Images
     runs-on: ubuntu-latest
@@ -133,9 +125,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  # 4. Deploy portal infrastructure via Terraform
-  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   deploy-portal:
     name: Deploy Portal to Azure
     runs-on: ubuntu-latest
@@ -197,18 +186,15 @@ jobs:
         run: |
           URL=$(terraform output -raw frontend_url 2>/dev/null || echo "https://terraportal.azurecontainerapps.io")
           echo "url=$URL" >> $GITHUB_OUTPUT
-          echo "ðŸš€ TerraPortal deployed to: $URL"
+          echo "TerraPortal deployed to: $URL"
 
       - name: Post URL to summary
         run: |
-          echo "## ðŸš€ TerraPortal Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "## TerraPortal Deployed" >> $GITHUB_STEP_SUMMARY
           echo "**URL:** ${{ steps.tf-out.outputs.url }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**Environment:** ${{ inputs.environment || 'prod' }}" >> $GITHUB_STEP_SUMMARY
 
-  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  # 5. Notify on failure
-  # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   notify:
     name: Notify on Failure
     runs-on: ubuntu-latest
@@ -224,12 +210,12 @@ jobs:
         with:
           payload: |
             {
-              "text": "âŒ TerraPortal pipeline failed",
+              "text": "TerraPortal pipeline failed",
               "blocks": [{
                 "type": "section",
                 "text": {
                   "type": "mrkdwn",
-                  "text": "*âŒ TerraPortal CI/CD Failed*\n>Branch: `${{ github.ref_name }}`\n>Commit: `${{ github.sha }}`\n><${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                  "text": "*TerraPortal CI/CD Failed*\n>Branch: ${{ github.ref_name }}\n>Commit: ${{ github.sha }}\n><${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
                 }
               }]
             }

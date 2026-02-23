@@ -14,6 +14,8 @@ app.use(express.json());
 // ─────────────────────────────────────────────────────────────
 // CONFIG — driven by env vars (set in GitHub Secrets / .env)
 // ─────────────────────────────────────────────────────────────
+const AZURE_REGIONS = ['East US','East US 2','West US','West US 2','West Europe','North Europe','Southeast Asia','Australia East','UK South','Canada Central','Japan East'];
+
 const CONFIG = {
   PORT: process.env.PORT || 3001,
   // Azure state backend

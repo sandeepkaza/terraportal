@@ -25,10 +25,27 @@ variable "storage_connection_string" {
   description = "Azure Storage connection string for inventory + state"
   sensitive   = true
 }
+variable "arm_client_id" {
+  description = "Azure service principal client ID"
+  default     = ""
+}
+variable "arm_client_secret" {
+  description = "Azure service principal client secret"
+  sensitive   = true
+  default     = ""
+}
+variable "arm_tenant_id" {
+  description = "Azure tenant ID"
+  default     = ""
+}
+variable "arm_subscription_id" {
+  description = "Azure subscription ID"
+  default     = ""
+}
 
 locals {
-  name_prefix  = "terraportal-${var.environment}"
-  backend_url  = "https://ca-terraportal-${var.environment}-backend.agreeableground-f61d57af.eastus.azurecontainerapps.io"
+  name_prefix = "terraportal-${var.environment}"
+  backend_url = "https://ca-terraportal-${var.environment}-backend.agreeableground-f61d57af.eastus.azurecontainerapps.io"
   tags = {
     managed_by  = "terraform-portal"
     environment = var.environment
@@ -71,6 +88,10 @@ resource "azurerm_container_app" "backend" {
     name  = "storage-conn"
     value = var.storage_connection_string
   }
+  secret {
+    name  = "arm-client-secret"
+    value = var.arm_client_secret
+  }
 
   template {
     min_replicas = 1
@@ -93,6 +114,22 @@ resource "azurerm_container_app" "backend" {
       env {
         name  = "DEMO_MODE"
         value = "false"
+      }
+      env {
+        name  = "ARM_CLIENT_ID"
+        value = var.arm_client_id
+      }
+      env {
+        name        = "ARM_CLIENT_SECRET"
+        secret_name = "arm-client-secret"
+      }
+      env {
+        name  = "ARM_TENANT_ID"
+        value = var.arm_tenant_id
+      }
+      env {
+        name  = "ARM_SUBSCRIPTION_ID"
+        value = var.arm_subscription_id
       }
       env {
         name  = "TF_STATE_STORAGE_ACCOUNT"

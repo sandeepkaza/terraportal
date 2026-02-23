@@ -27,7 +27,8 @@ variable "storage_connection_string" {
 }
 
 locals {
-  name_prefix = "terraportal-${var.environment}"
+  name_prefix  = "terraportal-${var.environment}"
+  backend_url  = "https://ca-terraportal-${var.environment}-backend.agreeableground-f61d57af.eastus.azurecontainerapps.io"
   tags = {
     managed_by  = "terraform-portal"
     environment = var.environment
@@ -151,7 +152,7 @@ resource "azurerm_container_app" "frontend" {
 
       env {
         name  = "VITE_API_URL"
-        value = "https://${azurerm_container_app.backend.latest_revision_fqdn}"
+        value = local.backend_url
       }
     }
   }
@@ -173,6 +174,6 @@ output "frontend_url" {
 }
 
 output "backend_url" {
-  value       = "https://${azurerm_container_app.backend.latest_revision_fqdn}"
+  value       = local.backend_url
   description = "TerraPortal API URL"
 }

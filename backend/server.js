@@ -868,7 +868,6 @@ const RESOURCE_TYPES = {
   },
 };
 
-const AZURE_REGIONS = ['East US','East US 2','West US','West US 2','West Europe','North Europe','Southeast Asia','Australia East','UK South','Canada Central','Japan East'];
 
 app.listen(CONFIG.PORT, () => {
   console.log(`TerraPortal API running on port ${CONFIG.PORT}`);

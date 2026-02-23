@@ -122,49 +122,69 @@ async function runTerraform(deploymentId, workspaceDir, action, onLog) {
     return simulateTerraform(deploymentId, action, onLog);
   }
 
-  const env = {
-    ...process.env,
-    ARM_CLIENT_ID:       CONFIG.ARM_CLIENT_ID,
-    ARM_CLIENT_SECRET:   CONFIG.ARM_CLIENT_SECRET,
-    ARM_TENANT_ID:       CONFIG.ARM_TENANT_ID,
-    ARM_SUBSCRIPTION_ID: CONFIG.ARM_SUBSCRIPTION_ID,
-    TF_IN_AUTOMATION:    '1',
-  };
+  const githubToken = process.env.GITHUB_TOKEN;
+  const githubRepo  = process.env.GITHUB_REPO;
 
-  const backend = getTfBackendConfig(deploymentId);
-  const backendArgs = Object.entries(backend).map(([k, v]) => `-backend-config="${k}=${v}"`).join(' ');
+  if (!githubToken || !githubRepo) {
+    throw new Error('GITHUB_TOKEN and GITHUB_REPO env vars are required');
+  }
 
-  const steps =
-    action === 'provision' || action === 'update'
-      ? [
-          { cmd: `terraform init ${backendArgs}`,        label: 'Init' },
-          { cmd: 'terraform validate',                    label: 'Validate' },
-          { cmd: 'terraform plan -out=tfplan -detailed-exitcode', label: 'Plan' },
-          { cmd: 'terraform apply -auto-approve tfplan',  label: 'Apply' },
-          { cmd: 'terraform output -json',                label: 'Outputs' },
-        ]
-      : [
-          { cmd: `terraform init ${backendArgs}`,         label: 'Init' },
-          { cmd: 'terraform plan -destroy -out=tfplan',   label: 'Plan Destroy' },
-          { cmd: 'terraform apply -auto-approve tfplan',  label: 'Destroy' },
-        ];
-
-  let outputs = {};
-  for (const step of steps) {
-    onLog(`\n▶ terraform ${step.label}...`);
-    try {
-      const result = execSync(step.cmd, { cwd: workspaceDir, env, maxBuffer: 10 * 1024 * 1024 }).toString();
-      if (step.label === 'Outputs') {
-        try { outputs = JSON.parse(result); } catch (_) {}
-      }
-      result.split('\n').forEach(l => l.trim() && onLog(l));
-      onLog(`✓ ${step.label} complete`);
-    } catch (err) {
-      onLog(`✗ ${step.label} failed: ${err.message}`);
-      throw err;
+  // Upload terraform files to Azure Blob so GitHub Actions can download them
+  onLog('→ Uploading Terraform workspace to Azure Blob...');
+  const files = ['main.tf', 'variables.tf', 'outputs.tf'];
+  for (const file of files) {
+    const filePath = path.join(workspaceDir, file);
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      await azureBlobUpload('deployments', `${deploymentId}/${file}`, content);
+      onLog(`✓ Uploaded ${file}`);
     }
   }
-  return outputs;
+
+  // Trigger GitHub Actions via repository_dispatch
+  onLog('→ Triggering GitHub Actions workflow...');
+  const https = require('https');
+  const [owner, repo] = githubRepo.split('/');
+  const body = JSON.stringify({
+    event_type: `terraform-${action}`,
+    client_payload: {
+      action,
+      deployment_id: deploymentId,
+      resource_type: 'unknown',
+      environment:   'prod',
+      ticket_number: 'PORTAL',
+    }
+  });
+
+  await new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.github.com',
+      path: `/repos/${owner}/${repo}/dispatches`,
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${githubToken}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'TerraPortal/2.0',
+        'Content-Length': Buffer.byteLength(body),
+      }
+    }, (res) => {
+      if (res.statusCode === 204) {
+        resolve();
+      } else {
+        let data = '';
+        res.on('data', d => data += d);
+        res.on('end', () => reject(new Error(`GitHub API ${res.statusCode}: ${data}`)));
+      }
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+
+  onLog('✓ GitHub Actions triggered — Terraform running in CI');
+  onLog('ℹ️  Check GitHub Actions tab for live progress');
+  return {}
 }
 
 async function simulateTerraform(deploymentId, action, onLog) {
